@@ -1,0 +1,667 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cymra Label Printer</title>
+<style>
+  :root{
+    --ink:#14161a;
+    --ink-60:#5a6067;
+    --ink-30:#9aa0a6;
+    --liner:#e4e6e8;
+    --panel:#ffffff;
+    --rule:#d2d6da;
+    --rule-soft:#e8eaec;
+    --signal:#151f38;      /* Cymra navy */
+    --signal-dark:#0d1526;
+    --accent:#1fa5e4;      /* Cymra cyan */
+    --signal-soft:#e8f4fc;
+    --warn:#b45309;
+    --warn-soft:#fff7ed;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+    --ui: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    background:var(--liner);
+    color:var(--ink);
+    font-family:var(--ui);
+    font-size:14px;
+    line-height:1.45;
+    -webkit-font-smoothing:antialiased;
+  }
+
+  /* ---------- shell ---------- */
+  .app{min-height:100vh;display:flex;flex-direction:column}
+
+  .topbar{
+    display:flex;align-items:baseline;gap:18px;flex-wrap:wrap;
+    padding:14px 22px;background:var(--signal);color:#fff;
+  }
+  .topbar h1{
+    margin:0;font-size:15px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;
+  }
+  .topbar h1 span{color:var(--accent)}
+  .topbar .sub{font-size:12px;color:rgba(255,255,255,.6);letter-spacing:.04em}
+  .readout{
+    margin-left:auto;display:flex;gap:20px;font-family:var(--mono);font-size:11.5px;color:rgba(255,255,255,.8);
+  }
+  .readout b{display:block;font-weight:400;color:rgba(255,255,255,.5);font-size:9.5px;letter-spacing:.12em;text-transform:uppercase}
+  .readout span{color:#fff}
+
+  .work{display:flex;align-items:flex-start;gap:0;flex:1;min-height:0}
+
+  /* ---------- controls ---------- */
+  .controls{
+    width:392px;flex:0 0 392px;background:var(--panel);
+    border-right:1px solid var(--rule);
+    padding:0 0 40px;
+    align-self:stretch;
+  }
+  .group{border-bottom:1px solid var(--rule-soft);padding:18px 22px 20px}
+  .group > h2{
+    margin:0 0 14px;font-size:10.5px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-30);
+    display:flex;align-items:center;gap:8px;
+  }
+  .group > h2::after{content:"";flex:1;height:1px;background:var(--rule-soft)}
+
+  .field{margin-bottom:13px}
+  .field:last-child{margin-bottom:0}
+  label.lbl{display:block;font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-60);margin-bottom:5px}
+  input[type=text],input[type=date],input[type=number],select{
+    width:100%;padding:8px 10px;border:1px solid var(--rule);border-radius:3px;
+    font-family:var(--mono);font-size:14px;color:var(--ink);background:#fff;
+  }
+  input[type=text]:focus,input[type=date]:focus,input[type=number]:focus,select:focus{
+    outline:2px solid var(--accent);outline-offset:-1px;border-color:var(--accent);
+  }
+  select{font-family:var(--ui);font-size:13px}
+  .row{display:flex;gap:10px}
+  .row > .field{flex:1;margin-bottom:13px}
+
+  .check{display:flex;align-items:center;gap:9px;margin:9px 0;font-size:13px;color:var(--ink)}
+  .check input{width:16px;height:16px;accent-color:var(--accent);margin:0}
+
+  .slider{display:flex;align-items:center;gap:10px}
+  .slider input[type=range]{flex:1;accent-color:var(--accent)}
+  .slider output{font-family:var(--mono);font-size:12px;color:var(--ink-60);min-width:56px;text-align:right}
+
+  .seg{display:flex;border:1px solid var(--rule);border-radius:3px;overflow:hidden}
+  .seg button{
+    flex:1;padding:7px 0;border:0;border-right:1px solid var(--rule);background:#fff;
+    font-family:var(--mono);font-size:12px;color:var(--ink-60);cursor:pointer;
+  }
+  .seg button:last-child{border-right:0}
+  .seg button[aria-pressed=true]{background:var(--signal);color:#fff}
+  .seg button:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+
+  .actions{padding:20px 22px;display:flex;flex-direction:column;gap:10px}
+  .print-btn{
+    width:100%;padding:14px;border:0;border-radius:3px;background:var(--signal);color:#fff;
+    font-family:var(--ui);font-size:14px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;
+  }
+  .print-btn:hover{background:var(--signal-dark)}
+  .print-btn:disabled{background:var(--ink-30);cursor:not-allowed}
+  .hint{font-size:11.5px;color:var(--ink-60);line-height:1.5}
+  .hint code{font-family:var(--mono);font-size:11px;background:var(--liner);padding:1px 4px;border-radius:2px}
+
+  .alert{
+    margin-top:12px;padding:9px 11px;border-left:3px solid var(--warn);background:var(--warn-soft);
+    font-size:12px;color:#7c2d12;line-height:1.45;
+  }
+  .alert.hidden{display:none}
+
+  /* ---------- stage ---------- */
+  .stage{
+    flex:1;min-width:0;padding:34px 30px 60px;display:flex;justify-content:center;gap:0;
+    overflow:auto;align-self:stretch;
+  }
+  .stage-inner{display:flex;align-items:flex-start;gap:0}
+
+  /* signature: mm rule down the length of the web */
+  .ruler{
+    position:relative;width:52px;flex:0 0 52px;font-family:var(--mono);font-size:9px;color:var(--ink-30);
+  }
+  .ruler .tick{position:absolute;right:0;display:flex;align-items:center;gap:5px;transform:translateY(-50%)}
+  .ruler .tick i{display:block;height:1px;background:var(--rule);width:9px}
+  .ruler .tick.major i{width:16px;background:var(--ink-30)}
+  .ruler .tick.major span{color:var(--ink-60);font-weight:600}
+  .ruler .cursor{position:absolute;right:0;left:0;height:0;border-top:1px dashed var(--accent)}
+  .ruler .cursor em{
+    position:absolute;right:2px;top:-16px;font-style:normal;font-size:9px;color:#fff;background:var(--accent);
+    padding:1px 4px;border-radius:2px;letter-spacing:.04em;white-space:nowrap;
+  }
+
+  .web{
+    position:relative;background:#fff;
+    box-shadow:0 1px 0 rgba(20,22,26,.06),0 12px 30px -18px rgba(20,22,26,.5);
+    outline:1px solid var(--rule);
+  }
+  .web::before,.web::after{
+    content:"";position:absolute;top:0;bottom:0;width:7px;background:
+      repeating-linear-gradient(to bottom,var(--rule-soft) 0 2px,transparent 2px 7px);
+  }
+  .web::before{left:-11px}
+  .web::after{right:-11px}
+
+  /* ---------- the label itself (shared by preview + print) ---------- */
+  .label{position:relative;overflow:hidden;background:#fff;color:#000}
+  .label .content{position:absolute;top:0;left:0;display:flex;flex-direction:column}
+  .label .datum{white-space:nowrap;line-height:1.25}
+  .label .datum .k{font-weight:400}
+  .label .datum .v{font-weight:700}
+  .label .barcode{margin-top:2mm}
+  .label .barcode svg{display:block}
+  .label .hrt{font-family:var(--mono);letter-spacing:.06em;margin-top:.6mm}
+  .label .guides{position:absolute;inset:0;pointer-events:none}
+
+  .stage-note{
+    margin-top:14px;font-size:11px;color:var(--ink-60);font-family:var(--mono);text-align:center;
+  }
+
+  /* ---------- print ---------- */
+  .print-root{display:none}
+  @media print{
+    html,body{background:#fff}
+    .app{display:none !important}
+    .print-root{display:block !important}
+    .print-root .label{page-break-after:always;break-after:page}
+    .print-root .label:last-child{page-break-after:auto;break-after:auto}
+  }
+
+  @media (max-width:900px){
+    .work{flex-direction:column}
+    .controls{width:100%;flex:1 1 auto;border-right:0;border-bottom:1px solid var(--rule)}
+    .readout{margin-left:0;width:100%}
+  }
+  @media (prefers-reduced-motion:reduce){*{transition:none !important;animation:none !important}}
+</style>
+<style id="pageStyle">@page{size:45mm 218mm;margin:0}</style>
+</head>
+<body>
+
+<div class="app">
+  <header class="topbar">
+    <h1><span>Cymra</span> Label Printer</h1>
+    <span class="sub">Batch &amp; expiry · SATO CL4-SXR TT305</span>
+    <div class="readout">
+      <div><b>Stock</b><span id="ro-stock">45 × 218 mm</span></div>
+      <div><b>Dot pitch</b><span id="ro-dpi">305 dpi · 0.083 mm</span></div>
+      <div><b>Bar module</b><span id="ro-mod">—</span></div>
+      <div><b>Labels</b><span id="ro-qty">1</span></div>
+    </div>
+  </header>
+
+  <div class="work">
+    <form class="controls" id="form" autocomplete="off">
+
+      <div class="group">
+        <h2>Variable data</h2>
+        <div class="field">
+          <label class="lbl" for="batch">Batch number</label>
+          <input type="text" id="batch" placeholder="e.g. CYM2608A" maxlength="24">
+        </div>
+        <div class="row">
+          <div class="field">
+            <label class="lbl" for="expiry">Expiry date</label>
+            <input type="date" id="expiry">
+          </div>
+          <div class="field">
+            <label class="lbl" for="expfmt">Printed as</label>
+            <select id="expfmt">
+              <option value="DD/MM/YYYY">31/12/2027</option>
+              <option value="DD MMM YYYY">31 DEC 2027</option>
+              <option value="MMM YYYY" selected>DEC 2027</option>
+              <option value="MM/YYYY">12/2027</option>
+              <option value="YYYY-MM-DD">2027-12-31</option>
+            </select>
+          </div>
+        </div>
+        <label class="check"><input type="checkbox" id="useMfg"> Include manufacture date</label>
+        <div class="field" id="mfgWrap" hidden>
+          <label class="lbl" for="mfg">Manufacture date</label>
+          <input type="date" id="mfg">
+        </div>
+        <div class="field">
+          <label class="lbl" for="extra">Extra line (optional)</label>
+          <input type="text" id="extra" placeholder="e.g. product or SKU" maxlength="40">
+        </div>
+      </div>
+
+      <div class="group">
+        <h2>Barcode</h2>
+        <label class="check"><input type="checkbox" id="useBarcode"> Print Code 128 of the batch number</label>
+        <div id="bcOpts" hidden>
+          <div class="field">
+            <label class="lbl" for="bcHeight">Bar height</label>
+            <div class="slider">
+              <input type="range" id="bcHeight" min="6" max="30" step="1" value="12">
+              <output id="bcHeightOut">12 mm</output>
+            </div>
+          </div>
+          <label class="check"><input type="checkbox" id="bcHrt" checked> Show the number under the bars</label>
+        </div>
+        <div class="alert hidden" id="bcWarn"></div>
+      </div>
+
+      <div class="group">
+        <h2>Placement on the label</h2>
+        <div class="field">
+          <label class="lbl">Text direction</label>
+          <div class="seg" id="rot">
+            <button type="button" data-rot="0" aria-pressed="false">0°</button>
+            <button type="button" data-rot="90" aria-pressed="true">90°</button>
+            <button type="button" data-rot="180" aria-pressed="false">180°</button>
+            <button type="button" data-rot="270" aria-pressed="false">270°</button>
+          </div>
+        </div>
+        <div class="field">
+          <label class="lbl">Alignment</label>
+          <div class="seg" id="align">
+            <button type="button" data-align="left" aria-pressed="false">Left</button>
+            <button type="button" data-align="center" aria-pressed="false">Centre</button>
+            <button type="button" data-align="right" aria-pressed="true">Right</button>
+          </div>
+        </div>
+        <div class="field">
+          <label class="lbl" for="offset">Distance from the leading edge</label>
+          <div class="slider">
+            <input type="range" id="offset" min="0" max="200" step="0.5" value="30.5">
+            <output id="offsetOut">30.5 mm</output>
+          </div>
+        </div>
+        <div class="field">
+          <label class="lbl" for="pad">Side margin</label>
+          <div class="slider">
+            <input type="range" id="pad" min="0" max="20" step="0.5" value="18.5">
+            <output id="padOut">18.5 mm</output>
+          </div>
+        </div>
+        <div class="field">
+          <label class="lbl" for="size">Text size</label>
+          <div class="slider">
+            <input type="range" id="size" min="5" max="24" step="0.5" value="9">
+            <output id="sizeOut">9.0 pt</output>
+          </div>
+        </div>
+        <div class="row">
+          <div class="field">
+            <label class="lbl" for="font">Typeface</label>
+            <select id="font">
+              <option value="Arial, Helvetica, sans-serif">Arial</option>
+              <option value="'Arial Narrow', Arial, sans-serif">Arial Narrow</option>
+              <option value="Consolas, 'Courier New', monospace">Monospace</option>
+            </select>
+          </div>
+          <div class="field">
+            <label class="lbl" for="prefix">Field prefixes</label>
+            <select id="prefix">
+              <option value="mixed" selected>B: / EXP:</option>
+              <option value="long">BATCH: / EXP:</option>
+              <option value="short">B: / E:</option>
+              <option value="none">Values only</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div class="group">
+        <h2>Label stock</h2>
+        <div class="row">
+          <div class="field">
+            <label class="lbl" for="lw">Width</label>
+            <input type="number" id="lw" value="45" min="10" max="120" step="0.5">
+          </div>
+          <div class="field">
+            <label class="lbl" for="lh">Length</label>
+            <input type="number" id="lh" value="218" min="10" max="600" step="0.5">
+          </div>
+          <div class="field">
+            <label class="lbl" for="dpi">Head</label>
+            <select id="dpi">
+              <option value="203">203 dpi</option>
+              <option value="305" selected>305 dpi</option>
+              <option value="609">609 dpi</option>
+            </select>
+          </div>
+        </div>
+        <label class="check"><input type="checkbox" id="guides"> Print alignment guides (setup only — do not use for production labels)</label>
+      </div>
+
+      <div class="actions">
+        <div class="field">
+          <label class="lbl" for="qty">Labels to print</label>
+          <input type="number" id="qty" value="1" min="1" max="500" step="1">
+        </div>
+        <button type="button" class="print-btn" id="printBtn">Print labels</button>
+        <p class="hint">
+          In the print dialog choose the SATO, set <b>Scale 100%</b> and <b>Margins: None</b>, and turn off headers and footers.
+          Choosing <b>Save as PDF</b> instead writes a PDF at exactly the stock size.
+        </p>
+        <div class="alert hidden" id="dataWarn"></div>
+      </div>
+    </form>
+
+    <div class="stage">
+      <div class="stage-inner">
+        <div class="ruler" id="ruler"></div>
+        <div>
+          <div class="web" id="web"></div>
+          <div class="stage-note" id="stageNote"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="print-root" id="printRoot"></div>
+
+<script>
+(function(){
+  "use strict";
+
+  var MM = 96/25.4;          // px per mm at CSS 96dpi
+  var $ = function(id){ return document.getElementById(id); };
+
+  /* ---------------- Code 128 ---------------- */
+  var C128 = ["212222","222122","222221","121223","121322","131222","122213","122312","132212","221213",
+  "221312","231212","112232","122132","122231","113222","123122","123221","223211","221132",
+  "221231","213212","223112","312131","311222","321122","321221","312212","322112","322211",
+  "212123","212321","232121","111323","131123","131321","112313","132113","132311","211313",
+  "231113","231311","112133","112331","132131","113123","113321","133121","313121","211331",
+  "231131","213113","213311","213131","311123","311321","331121","312113","312311","332111",
+  "314111","221411","431111","111224","111422","121124","121421","141122","141221","112214",
+  "112412","122114","122411","142112","142211","241211","221114","413111","241112","134111",
+  "111242","121142","121241","114212","124112","124211","411212","421112","421211","212141",
+  "214121","412121","111143","111341","131141","114113","114311","411113","411311","113141",
+  "114131","311141","411131","211412","211214","211232","2331112"];
+
+  function code128B(text){
+    var codes = [104], i, v, sum = 104, bars = [];
+    for(i=0;i<text.length;i++){
+      v = text.charCodeAt(i) - 32;
+      if(v < 0 || v > 94) return null;      // outside Code Set B
+      codes.push(v);
+      sum += v * (i+1);
+    }
+    codes.push(sum % 103);
+    codes.push(106);
+    for(i=0;i<codes.length;i++){
+      var p = C128[codes[i]];
+      for(var j=0;j<p.length;j++) bars.push(parseInt(p.charAt(j),10));
+    }
+    return bars;
+  }
+
+  function barcodeSVG(text, widthMm, heightMm){
+    var bars = code128B(text);
+    if(!bars) return null;
+    var quiet = 10, x = quiet, rects = "", i;
+    for(i=0;i<bars.length;i++){
+      if(i % 2 === 0) rects += '<rect x="'+x+'" y="0" width="'+bars[i]+'" height="100"/>';
+      x += bars[i];
+    }
+    var total = x + quiet;
+    return {
+      svg:'<svg viewBox="0 0 '+total+' 100" preserveAspectRatio="none" width="'+widthMm+'mm" height="'+heightMm+'mm" fill="#000" shape-rendering="crispEdges">'+rects+'</svg>',
+      modules: total
+    };
+  }
+
+  /* ---------------- state ---------------- */
+  var S = {
+    batch:"", expiry:"", expfmt:"MMM YYYY", useMfg:false, mfg:"", extra:"",
+    useBarcode:false, bcHeight:12, bcHrt:true,
+    rot:90, align:"right", offset:30.5, pad:18.5, size:9,
+    font:"Arial, Helvetica, sans-serif", prefix:"mixed",
+    lw:45, lh:218, dpi:305, guides:false, qty:1
+  };
+
+  var MONTHS = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
+
+  function fmtDate(iso, fmt){
+    if(!iso) return "";
+    var p = iso.split("-");
+    if(p.length !== 3) return "";
+    var y = p[0], m = parseInt(p[1],10), d = p[2];
+    switch(fmt){
+      case "DD/MM/YYYY":  return d+"/"+p[1]+"/"+y;
+      case "DD MMM YYYY": return d+" "+MONTHS[m-1]+" "+y;
+      case "MMM YYYY":    return MONTHS[m-1]+" "+y;
+      case "MM/YYYY":     return p[1]+"/"+y;
+      case "YYYY-MM-DD":  return iso;
+    }
+    return iso;
+  }
+
+  /* ---------------- label builder ---------------- */
+  function buildLabel(scale){
+    scale = scale || 1;
+    var W = S.lw, H = S.lh;
+    var rotated = (S.rot === 90 || S.rot === 270);
+    var boxW = rotated ? H : W;          // content box in mm, before rotation
+    var boxH = rotated ? W : H;
+    var innerW = boxW - S.pad*2;
+
+    var el = document.createElement("div");
+    el.className = "label";
+    el.style.width  = W+"mm";
+    el.style.height = H+"mm";
+    if(scale !== 1){
+      el.style.transform = "scale("+scale+")";
+      el.style.transformOrigin = "0 0";
+    }
+
+    var t;
+    if(S.rot === 90)       t = "translateX("+W+"mm) rotate(90deg)";
+    else if(S.rot === 270) t = "translateY("+H+"mm) rotate(-90deg)";
+    else if(S.rot === 180) t = "translate("+W+"mm,"+H+"mm) rotate(180deg)";
+    else                   t = "none";
+
+    var c = document.createElement("div");
+    c.className = "content";
+    c.style.width  = boxW+"mm";
+    c.style.height = boxH+"mm";
+    c.style.transform = t;
+    c.style.transformOrigin = "0 0";
+    c.style.paddingTop = S.offset+"mm";
+    c.style.paddingLeft = S.pad+"mm";
+    c.style.paddingRight = S.pad+"mm";
+    c.style.fontFamily = S.font;
+    c.style.fontSize = S.size+"pt";
+    c.style.textAlign = S.align;
+    c.style.alignItems = S.align === "left" ? "flex-start" : (S.align === "right" ? "flex-end" : "center");
+
+    var PFX = {
+      mixed: { b:"B: ",     e:"EXP: ", m:"MFD: " },
+      long:  { b:"BATCH: ", e:"EXP: ", m:"MFD: " },
+      short: { b:"B: ",     e:"E: ",   m:"M: "   },
+      none:  { b:"",        e:"",      m:""      }
+    };
+    var p = PFX[S.prefix] || PFX.mixed;
+    var pfxBatch = p.b, pfxExp = p.e, pfxMfg = p.m;
+
+    var html = "";
+    if(S.extra)  html += '<div class="datum"><span class="v">'+esc(S.extra)+'</span></div>';
+    if(S.batch)  html += '<div class="datum"><span class="k">'+pfxBatch+'</span><span class="v">'+esc(S.batch)+'</span></div>';
+    if(S.useMfg && S.mfg) html += '<div class="datum"><span class="k">'+pfxMfg+'</span><span class="v">'+fmtDate(S.mfg,S.expfmt)+'</span></div>';
+    if(S.expiry) html += '<div class="datum"><span class="k">'+pfxExp+'</span><span class="v">'+fmtDate(S.expiry,S.expfmt)+'</span></div>';
+
+    var modInfo = null;
+    if(S.useBarcode && S.batch){
+      var bc = barcodeSVG(S.batch, innerW, S.bcHeight);
+      if(bc){
+        modInfo = innerW / bc.modules;
+        html += '<div class="barcode">'+bc.svg+
+                (S.bcHrt ? '<div class="hrt" style="font-size:'+(S.size*0.8)+'pt">'+esc(S.batch)+'</div>' : '')+
+                '</div>';
+      }
+    }
+    c.innerHTML = html;
+    el.appendChild(c);
+
+    if(S.guides){
+      var g = document.createElement("div");
+      g.className = "guides";
+      var ticks = "";
+      for(var y=10;y<H;y+=10){
+        ticks += '<div style="position:absolute;left:0;top:'+y+'mm;width:3mm;height:0;border-top:.2mm solid #000"></div>'+
+                 '<div style="position:absolute;right:0;top:'+y+'mm;width:3mm;height:0;border-top:.2mm solid #000"></div>';
+      }
+      g.innerHTML = '<div style="position:absolute;inset:0;border:.2mm dashed #000"></div>'+
+                    '<div style="position:absolute;left:0;right:0;top:'+S.offset+'mm;border-top:.2mm solid #000"></div>'+ticks;
+      el.appendChild(g);
+    }
+
+    return { el: el, module: modInfo };
+  }
+
+  function esc(s){
+    return String(s).replace(/[&<>"]/g, function(ch){
+      return ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"})[ch];
+    });
+  }
+
+  /* ---------------- render ---------------- */
+  function render(){
+    // page size for printing
+    $("pageStyle").textContent = "@page{size:"+S.lw+"mm "+S.lh+"mm;margin:0}";
+
+    // preview, auto-fitted to the viewport
+    var avail = Math.max(320, window.innerHeight - 230);
+    var scale = Math.min(1, avail / (S.lh * MM));
+    var built = buildLabel(scale);
+
+    var web = $("web");
+    web.innerHTML = "";
+    web.style.width  = (S.lw * MM * scale)+"px";
+    web.style.height = (S.lh * MM * scale)+"px";
+    web.appendChild(built.el);
+
+    drawRuler(scale);
+
+    // readouts
+    var dotMm = 25.4 / S.dpi;
+    $("ro-stock").textContent = S.lw+" × "+S.lh+" mm";
+    $("ro-dpi").textContent = S.dpi+" dpi · "+dotMm.toFixed(3)+" mm";
+    $("ro-qty").textContent = S.qty;
+    $("ro-mod").textContent = built.module ? (built.module.toFixed(3)+" mm") : "—";
+    $("stageNote").textContent = "preview at "+Math.round(scale*100)+"% · "+S.lw+" × "+S.lh+" mm";
+
+    // barcode quality check
+    var bw = $("bcWarn");
+    if(built.module !== null && built.module !== undefined){
+      var dots = built.module / dotMm;
+      if(built.module < 0.25){
+        bw.textContent = "Narrow bar is "+built.module.toFixed(3)+" mm ("+dots.toFixed(1)+" dots at "+S.dpi+" dpi). Below about 0.25 mm scanners start to fail — rotate the barcode to 90° so it runs down the length, shorten the batch format, or move to a 305 dpi head.";
+        bw.classList.remove("hidden");
+      } else {
+        bw.classList.add("hidden");
+      }
+    } else if(S.useBarcode && S.batch && !code128B(S.batch)){
+      bw.textContent = "The batch number contains a character Code 128 Set B cannot encode. Use printable ASCII only.";
+      bw.classList.remove("hidden");
+    } else {
+      bw.classList.add("hidden");
+    }
+
+    // can we print?
+    var missing = [];
+    if(!S.batch) missing.push("batch number");
+    if(!S.expiry) missing.push("expiry date");
+    var dw = $("dataWarn");
+    if(missing.length){
+      dw.textContent = "Enter the "+missing.join(" and ")+" before printing.";
+      dw.classList.remove("hidden");
+      $("printBtn").disabled = true;
+    } else {
+      dw.classList.add("hidden");
+      $("printBtn").disabled = false;
+    }
+  }
+
+  function drawRuler(scale){
+    var r = $("ruler"), html = "", px = S.lh * MM * scale;
+    r.style.height = px+"px";
+    for(var mm=0; mm<=S.lh; mm+=10){
+      var major = (mm % 50 === 0);
+      html += '<div class="tick'+(major?" major":"")+'" style="top:'+(mm*MM*scale)+'px">'+
+              '<span>'+(major?mm:"")+'</span><i></i></div>';
+    }
+    html += '<div class="cursor" style="top:'+(S.offset*MM*scale)+'px"><em>'+S.offset.toFixed(1)+' mm</em></div>';
+    r.innerHTML = html;
+  }
+
+  /* ---------------- printing ---------------- */
+  function doPrint(){
+    var root = $("printRoot");
+    root.innerHTML = "";
+    for(var i=0;i<S.qty;i++) root.appendChild(buildLabel(1).el);
+    window.print();
+  }
+
+  /* ---------------- wiring ---------------- */
+  function bind(id, key, kind){
+    var el = $(id);
+    var ev = (kind === "check" || el.tagName === "SELECT") ? "change" : "input";
+    el.addEventListener(ev, function(){
+      if(kind === "check") S[key] = el.checked;
+      else if(kind === "num") S[key] = parseFloat(el.value) || 0;
+      else S[key] = el.value;
+      sideEffects(id);
+      render();
+    });
+  }
+
+  function sideEffects(id){
+    if(id === "useMfg")     $("mfgWrap").hidden = !S.useMfg;
+    if(id === "useBarcode") $("bcOpts").hidden = !S.useBarcode;
+    if(id === "offset")   $("offsetOut").textContent = S.offset.toFixed(1)+" mm";
+    if(id === "pad")      $("padOut").textContent = S.pad.toFixed(1)+" mm";
+    if(id === "size")     $("sizeOut").textContent = S.size.toFixed(1)+" pt";
+    if(id === "bcHeight") $("bcHeightOut").textContent = S.bcHeight+" mm";
+    if(id === "lh")       $("offset").max = String(Math.max(0, S.lh - 5));
+  }
+
+  bind("batch","batch");       bind("expiry","expiry");   bind("expfmt","expfmt");
+  bind("mfg","mfg");           bind("extra","extra");     bind("useMfg","useMfg","check");
+  bind("useBarcode","useBarcode","check"); bind("bcHeight","bcHeight","num");
+  bind("bcHrt","bcHrt","check");
+  bind("offset","offset","num"); bind("pad","pad","num"); bind("size","size","num");
+  bind("font","font");          bind("prefix","prefix");
+  bind("lw","lw","num");        bind("lh","lh","num");    bind("dpi","dpi","num");
+  bind("guides","guides","check"); bind("qty","qty","num");
+
+  function segment(containerId, attr, key, cast){
+    var box = $(containerId);
+    box.addEventListener("click", function(e){
+      var b = e.target.closest("button");
+      if(!b) return;
+      var kids = box.querySelectorAll("button");
+      for(var i=0;i<kids.length;i++) kids[i].setAttribute("aria-pressed", String(kids[i] === b));
+      S[key] = cast ? cast(b.getAttribute(attr)) : b.getAttribute(attr);
+      render();
+    });
+  }
+  segment("rot","data-rot","rot",function(v){ return parseInt(v,10); });
+  segment("align","data-align","align");
+
+  $("printBtn").addEventListener("click", doPrint);
+  window.addEventListener("resize", render);
+
+  // sensible starting expiry: two years out, end of month
+  (function seed(){
+    var d = new Date();
+    d.setFullYear(d.getFullYear()+2);
+    d = new Date(d.getFullYear(), d.getMonth()+1, 0);
+    var iso = d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+    $("expiry").value = iso; S.expiry = iso;
+  })();
+
+  render();
+})();
+</script>
+</body>
+</html>
