@@ -525,7 +525,16 @@
   }
 
   /* ---------------- render ---------------- */
+  function updateExpFmtOptions(){
+    var sel = $("expfmt"), sample = S.expiry || "2027-12-31";
+    for(var i=0;i<sel.options.length;i++){
+      sel.options[i].textContent = fmtDate(sample, sel.options[i].value);
+    }
+  }
+
   function render(){
+    updateExpFmtOptions();
+
     // page size for printing
     $("pageStyle").textContent = "@page{size:"+S.lw+"mm "+S.lh+"mm;margin:0}";
 
