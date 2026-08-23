@@ -198,6 +198,37 @@
     <form class="controls" id="form" autocomplete="off">
 
       <div class="group">
+        <h2>Label stock</h2>
+        <div class="field">
+          <label class="lbl" for="preset">Label type</label>
+          <select id="preset">
+            <option value="tube" selected>45 × 218 mm — Batch tube (SATO CL4)</option>
+            <option value="small">25 × 10 mm — Small label</option>
+            <option value="custom">Custom</option>
+          </select>
+        </div>
+        <div class="row">
+          <div class="field">
+            <label class="lbl" for="lw">Width</label>
+            <input type="number" id="lw" value="45" min="10" max="120" step="0.5">
+          </div>
+          <div class="field">
+            <label class="lbl" for="lh">Length</label>
+            <input type="number" id="lh" value="218" min="10" max="600" step="0.5">
+          </div>
+          <div class="field">
+            <label class="lbl" for="dpi">Head</label>
+            <select id="dpi">
+              <option value="203">203 dpi</option>
+              <option value="305" selected>305 dpi</option>
+              <option value="609">609 dpi</option>
+            </select>
+          </div>
+        </div>
+        <label class="check"><input type="checkbox" id="guides"> Print alignment guides (setup only — do not use for production labels)</label>
+      </div>
+
+      <div class="group">
         <h2>Variable data</h2>
         <div class="field">
           <label class="lbl" for="batch">Batch number</label>
@@ -307,29 +338,6 @@
         </div>
       </div>
 
-      <div class="group">
-        <h2>Label stock</h2>
-        <div class="row">
-          <div class="field">
-            <label class="lbl" for="lw">Width</label>
-            <input type="number" id="lw" value="45" min="10" max="120" step="0.5">
-          </div>
-          <div class="field">
-            <label class="lbl" for="lh">Length</label>
-            <input type="number" id="lh" value="218" min="10" max="600" step="0.5">
-          </div>
-          <div class="field">
-            <label class="lbl" for="dpi">Head</label>
-            <select id="dpi">
-              <option value="203">203 dpi</option>
-              <option value="305" selected>305 dpi</option>
-              <option value="609">609 dpi</option>
-            </select>
-          </div>
-        </div>
-        <label class="check"><input type="checkbox" id="guides"> Print alignment guides (setup only — do not use for production labels)</label>
-      </div>
-
       <div class="actions">
         <div class="field">
           <label class="lbl" for="qty">Labels to print</label>
@@ -420,6 +428,11 @@
   };
 
   var MONTHS = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
+
+  var PRESETS = {
+    tube:  { lw:45, lh:218, rot:90, align:"right", offset:30.5, pad:18.5, size:9,   font:"Arial, Helvetica, sans-serif",         prefix:"mixed" },
+    small: { lw:25, lh:10,  rot:0,  align:"left",  offset:1,    pad:1.5,  size:5.5, font:"'Arial Narrow', Arial, sans-serif",    prefix:"short" }
+  };
 
   function fmtDate(iso, fmt){
     if(!iso) return "";
@@ -525,6 +538,41 @@
   }
 
   /* ---------------- render ---------------- */
+  function setSeg(containerId, attr, value){
+    var box = $(containerId), kids = box.querySelectorAll("button");
+    for(var i=0;i<kids.length;i++){
+      var v = kids[i].getAttribute(attr);
+      var match = (attr === "data-rot") ? (parseInt(v,10) === value) : (v === value);
+      kids[i].setAttribute("aria-pressed", String(match));
+    }
+  }
+
+  function applyPreset(key){
+    var p = PRESETS[key];
+    if(!p) return;
+    S.lw=p.lw; S.lh=p.lh; S.rot=p.rot; S.align=p.align;
+    S.offset=p.offset; S.pad=p.pad; S.size=p.size; S.font=p.font; S.prefix=p.prefix;
+
+    $("lw").value = p.lw; $("lh").value = p.lh;
+    $("font").value = p.font; $("prefix").value = p.prefix;
+    setSeg("rot","data-rot", p.rot);
+    setSeg("align","data-align", p.align);
+
+    $("offset").max = String(Math.max(0, p.lh - 5));
+    $("offset").value = p.offset; $("pad").value = p.pad; $("size").value = p.size;
+    sideEffects("offset"); sideEffects("pad"); sideEffects("size");
+
+    render();
+  }
+
+  function syncPresetSelect(){
+    var sel = $("preset"), match = "custom";
+    for(var key in PRESETS){
+      if(PRESETS[key].lw === S.lw && PRESETS[key].lh === S.lh){ match = key; break; }
+    }
+    if(sel.value !== match) sel.value = match;
+  }
+
   function updateExpFmtOptions(){
     var sel = $("expfmt"), sample = S.expiry || "2027-12-31";
     for(var i=0;i<sel.options.length;i++){
@@ -534,6 +582,7 @@
 
   function render(){
     updateExpFmtOptions();
+    syncPresetSelect();
 
     // page size for printing
     $("pageStyle").textContent = "@page{size:"+S.lw+"mm "+S.lh+"mm;margin:0}";
@@ -642,6 +691,8 @@
   bind("font","font");          bind("prefix","prefix");
   bind("lw","lw","num");        bind("lh","lh","num");    bind("dpi","dpi","num");
   bind("guides","guides","check"); bind("qty","qty","num");
+
+  $("preset").addEventListener("change", function(){ applyPreset($("preset").value); });
 
   function segment(containerId, attr, key, cast){
     var box = $(containerId);
