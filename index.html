@@ -34,7 +34,7 @@
   }
 
   /* ---------- shell ---------- */
-  .app{min-height:100vh;display:flex;flex-direction:column}
+  .app{height:100vh;display:flex;flex-direction:column}
 
   .topbar{
     display:flex;align-items:baseline;gap:18px;flex-wrap:wrap;
@@ -51,7 +51,7 @@
   .readout b{display:block;font-weight:400;color:rgba(255,255,255,.5);font-size:9.5px;letter-spacing:.12em;text-transform:uppercase}
   .readout span{color:#fff}
 
-  .work{display:flex;align-items:flex-start;gap:0;flex:1;min-height:0}
+  .work{display:flex;align-items:flex-start;gap:0;flex:1;min-height:0;overflow:hidden}
 
   /* ---------- controls ---------- */
   .controls{
@@ -59,6 +59,7 @@
     border-right:1px solid var(--rule);
     padding:0 0 40px;
     align-self:stretch;
+    overflow-y:auto;
   }
   .group{border-bottom:1px solid var(--rule-soft);padding:18px 22px 20px}
   .group > h2{
@@ -115,7 +116,7 @@
 
   /* ---------- stage ---------- */
   .stage{
-    flex:1;min-width:0;padding:34px 30px 60px;display:flex;justify-content:center;gap:0;
+    flex:1;min-width:0;padding:34px 30px 60px;display:flex;justify-content:center;align-items:center;gap:0;
     overflow:auto;align-self:stretch;
   }
   .stage-inner{display:flex;align-items:flex-start;gap:0}
@@ -172,8 +173,10 @@
   }
 
   @media (max-width:900px){
-    .work{flex-direction:column}
-    .controls{width:100%;flex:1 1 auto;border-right:0;border-bottom:1px solid var(--rule)}
+    .app{height:auto;min-height:100vh}
+    .work{flex-direction:column;overflow:visible}
+    .controls{width:100%;flex:1 1 auto;border-right:0;border-bottom:1px solid var(--rule);overflow-y:visible}
+    .stage{overflow:visible}
     .readout{margin-left:0;width:100%}
   }
   @media (prefers-reduced-motion:reduce){*{transition:none !important;animation:none !important}}
@@ -250,14 +253,21 @@
             </select>
           </div>
         </div>
-        <label class="check"><input type="checkbox" id="useMfg"> Include manufacture date</label>
-        <div class="field" id="mfgWrap" hidden>
-          <label class="lbl" for="mfg">Manufacture date</label>
-          <input type="date" id="mfg">
+        <label class="check"><input type="checkbox" id="combineBE"> Combine batch + expiry on one line (e.g. "EIRV260085 Exp: 01/2028")</label>
+        <div id="mfgGroupWrap">
+          <label class="check"><input type="checkbox" id="useMfg"> Include manufacture date</label>
+          <div class="field" id="mfgWrap" hidden>
+            <label class="lbl" for="mfg">Manufacture date</label>
+            <input type="date" id="mfg">
+          </div>
         </div>
         <div class="field">
-          <label class="lbl" for="extra">Extra line (optional)</label>
-          <input type="text" id="extra" placeholder="e.g. product or SKU" maxlength="40">
+          <label class="lbl" for="extra">Extra line 1 (optional)</label>
+          <input type="text" id="extra" placeholder="e.g. product or SKU" maxlength="60">
+        </div>
+        <div class="field">
+          <label class="lbl" for="extra2">Extra line 2 (optional)</label>
+          <input type="text" id="extra2" placeholder="e.g. composition detail" maxlength="60">
         </div>
       </div>
 
@@ -352,7 +362,7 @@
       </div>
     </form>
 
-    <div class="stage">
+    <div class="stage" id="stage">
       <div class="stage-inner">
         <div class="ruler" id="ruler"></div>
         <div>
@@ -420,7 +430,7 @@
 
   /* ---------------- state ---------------- */
   var S = {
-    batch:"", expiry:"", expfmt:"MMM YYYY", useMfg:false, mfg:"", extra:"",
+    batch:"", expiry:"", expfmt:"MMM YYYY", useMfg:false, mfg:"", extra:"", extra2:"", combineBE:false,
     useBarcode:false, bcHeight:12, bcHrt:true,
     rot:90, align:"right", offset:30.5, pad:18.5, size:9,
     font:"Arial, Helvetica, sans-serif", prefix:"mixed",
@@ -497,10 +507,21 @@
     var pfxBatch = p.b, pfxExp = p.e, pfxMfg = p.m;
 
     var html = "";
-    if(S.extra)  html += '<div class="datum"><span class="v">'+esc(S.extra)+'</span></div>';
-    if(S.batch)  html += '<div class="datum"><span class="k">'+pfxBatch+'</span><span class="v">'+esc(S.batch)+'</span></div>';
-    if(S.useMfg && S.mfg) html += '<div class="datum"><span class="k">'+pfxMfg+'</span><span class="v">'+fmtDate(S.mfg,S.expfmt)+'</span></div>';
-    if(S.expiry) html += '<div class="datum"><span class="k">'+pfxExp+'</span><span class="v">'+fmtDate(S.expiry,S.expfmt)+'</span></div>';
+    if(S.combineBE){
+      if(S.batch || S.expiry){
+        var be = esc(S.batch);
+        if(S.expiry) be += (be ? " " : "") + "Exp: " + fmtDate(S.expiry,S.expfmt);
+        html += '<div class="datum"><span class="v">'+be+'</span></div>';
+      }
+      if(S.extra)  html += '<div class="datum"><span class="v">'+esc(S.extra)+'</span></div>';
+      if(S.extra2) html += '<div class="datum"><span class="v">'+esc(S.extra2)+'</span></div>';
+    } else {
+      if(S.extra)  html += '<div class="datum"><span class="v">'+esc(S.extra)+'</span></div>';
+      if(S.extra2) html += '<div class="datum"><span class="v">'+esc(S.extra2)+'</span></div>';
+      if(S.batch)  html += '<div class="datum"><span class="k">'+pfxBatch+'</span><span class="v">'+esc(S.batch)+'</span></div>';
+      if(S.useMfg && S.mfg) html += '<div class="datum"><span class="k">'+pfxMfg+'</span><span class="v">'+fmtDate(S.mfg,S.expfmt)+'</span></div>';
+      if(S.expiry) html += '<div class="datum"><span class="k">'+pfxExp+'</span><span class="v">'+fmtDate(S.expiry,S.expfmt)+'</span></div>';
+    }
 
     var modInfo = null;
     if(S.useBarcode && S.batch){
@@ -587,8 +608,8 @@
     // page size for printing
     $("pageStyle").textContent = "@page{size:"+S.lw+"mm "+S.lh+"mm;margin:0}";
 
-    // preview, auto-fitted to the viewport
-    var avail = Math.max(320, window.innerHeight - 230);
+    // preview, auto-fitted to the stage's own height (so it stays centered and in view)
+    var avail = Math.max(320, $("stage").clientHeight - 130);
     var scale = Math.min(1, avail / (S.lh * MM));
     var built = buildLabel(scale);
 
@@ -675,6 +696,7 @@
 
   function sideEffects(id){
     if(id === "useMfg")     $("mfgWrap").hidden = !S.useMfg;
+    if(id === "combineBE")  $("mfgGroupWrap").hidden = S.combineBE;
     if(id === "useBarcode") $("bcOpts").hidden = !S.useBarcode;
     if(id === "offset")   $("offsetOut").textContent = S.offset.toFixed(1)+" mm";
     if(id === "pad")      $("padOut").textContent = S.pad.toFixed(1)+" mm";
@@ -685,6 +707,7 @@
 
   bind("batch","batch");       bind("expiry","expiry");   bind("expfmt","expfmt");
   bind("mfg","mfg");           bind("extra","extra");     bind("useMfg","useMfg","check");
+  bind("extra2","extra2");     bind("combineBE","combineBE","check");
   bind("useBarcode","useBarcode","check"); bind("bcHeight","bcHeight","num");
   bind("bcHrt","bcHrt","check");
   bind("offset","offset","num"); bind("pad","pad","num"); bind("size","size","num");
