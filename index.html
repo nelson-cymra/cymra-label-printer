@@ -228,6 +228,14 @@
             </select>
           </div>
         </div>
+        <div class="field">
+          <label class="lbl" for="pagemode">Printer page size</label>
+          <select id="pagemode">
+            <option value="fit" selected>Fit just inside the stock (recommended)</option>
+            <option value="exact">Exactly the stock size</option>
+            <option value="driver">Whatever the printer's stock is set to</option>
+          </select>
+        </div>
         <label class="check"><input type="checkbox" id="guides"> Print alignment guides (setup only — do not use for production labels)</label>
       </div>
 
@@ -355,8 +363,15 @@
         </div>
         <button type="button" class="print-btn" id="printBtn">Print labels</button>
         <p class="hint">
-          In the print dialog choose the SATO, set <b>Scale 100%</b> and <b>Margins: None</b>, and turn off headers and footers.
+          In the print dialog choose the SATO, pick the matching stock, set <b>Scale 100%</b> and
+          <b>Margins: None</b>, and turn off headers and footers.
           Choosing <b>Save as PDF</b> instead writes a PDF at exactly the stock size.
+        </p>
+        <p class="hint" id="pageNote"></p>
+        <p class="hint">
+          If the preview never loads, the driver is stuck in landscape. Open
+          <b>Printers &amp; scanners → SATO CL4-SXR TT305 → Printing preferences</b>,
+          set the orientation to <b>Portrait</b> and the stock to the one you are printing, then apply.
         </p>
         <div class="alert hidden" id="dataWarn"></div>
       </div>
@@ -434,8 +449,14 @@
     useBarcode:false, bcHeight:12, bcHrt:true,
     rot:90, align:"right", offset:30.5, pad:18.5, size:9,
     font:"Arial, Helvetica, sans-serif", prefix:"mixed",
-    lw:45, lh:218, dpi:305, guides:false, qty:1
+    lw:45, lh:218, dpi:305, guides:false, qty:1, pagemode:"fit"
   };
+
+  // Windows stores printer forms in 1/100 inch, so a 45 x 218 mm stock is really
+  // 44.96 x 217.93 mm. Asking for a page larger than the media makes the driver
+  // either scale the job down or push every label onto a second, blank page.
+  // Printing a hair under the nominal size costs about one dot at 305 dpi.
+  var PAGE_FIT = 0.1;   // mm trimmed from width and length when pagemode = "fit"
 
   var MONTHS = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
 
@@ -460,9 +481,11 @@
   }
 
   /* ---------------- label builder ---------------- */
-  function buildLabel(scale){
+  function buildLabel(scale, forPrint){
     scale = scale || 1;
     var W = S.lw, H = S.lh;
+    // the printed label must match the page box exactly, or it spills to a blank page
+    if(forPrint && S.pagemode !== "exact"){ W -= PAGE_FIT; H -= PAGE_FIT; }
     var rotated = (S.rot === 90 || S.rot === 270);
     var boxW = rotated ? H : W;          // content box in mm, before rotation
     var boxH = rotated ? W : H;
@@ -606,7 +629,16 @@
     syncPresetSelect();
 
     // page size for printing
-    $("pageStyle").textContent = "@page{size:"+S.lw+"mm "+S.lh+"mm;margin:0}";
+    var pw = S.lw, ph = S.lh;
+    if(S.pagemode !== "exact"){ pw -= PAGE_FIT; ph -= PAGE_FIT; }
+    if(S.pagemode === "driver"){
+      $("pageStyle").textContent = "@page{margin:0}";
+      $("pageNote").textContent = "The page size comes from the stock selected in the printer driver.";
+    } else {
+      $("pageStyle").textContent = "@page{size:"+pw+"mm "+ph+"mm;margin:0}";
+      $("pageNote").textContent = "Page sent to the printer: "+pw+" × "+ph+" mm"+
+        (S.pagemode === "fit" ? " (0.1 mm under the stock so each label stays on one page)." : ".");
+    }
 
     // preview, auto-fitted to the stage's own height (so it stays centered and in view)
     var avail = Math.max(320, $("stage").clientHeight - 130);
@@ -677,7 +709,7 @@
   function doPrint(){
     var root = $("printRoot");
     root.innerHTML = "";
-    for(var i=0;i<S.qty;i++) root.appendChild(buildLabel(1).el);
+    for(var i=0;i<S.qty;i++) root.appendChild(buildLabel(1, true).el);
     window.print();
   }
 
@@ -714,6 +746,7 @@
   bind("font","font");          bind("prefix","prefix");
   bind("lw","lw","num");        bind("lh","lh","num");    bind("dpi","dpi","num");
   bind("guides","guides","check"); bind("qty","qty","num");
+  bind("pagemode","pagemode");
 
   $("preset").addEventListener("change", function(){ applyPreset($("preset").value); });
 
