@@ -452,11 +452,18 @@
     lw:45, lh:218, dpi:305, guides:false, qty:1, pagemode:"fit"
   };
 
-  // Windows stores printer forms in 1/100 inch, so a 45 x 218 mm stock is really
-  // 44.96 x 217.93 mm. Asking for a page larger than the media makes the driver
-  // either scale the job down or push every label onto a second, blank page.
-  // Printing a hair under the nominal size costs about one dot at 305 dpi.
-  var PAGE_FIT = 0.1;   // mm trimmed from width and length when pagemode = "fit"
+  // The driver's stocks are exactly their nominal size — queried from the SATO with
+  // DeviceCapabilities(DC_PAPERSIZE), which reports in tenths of a mm:
+  // "Superbly Flowers" = 45.0 x 218.0 mm, "Vape labels" = 25.0 x 10.0 mm.
+  // (PrinterSettings reports 44.96 / 24.89; that is only its whole-1/100-inch rounding.)
+  //
+  // So @page asks for the media size exactly, and the label is drawn a hair smaller.
+  // The slack is the point: the two must NOT be equal. Layout happens in CSS px
+  // (9.9 mm = 37.417 px), and an element that rounds up even a fraction of a pixel
+  // against a page box of identical size no longer fits, so the renderer emits a
+  // blank second page. That is the intermittent extra label on the 25 x 10 stock.
+  // 0.1 mm is about one dot at 305 dpi — invisible on the label, decisive here.
+  var LABEL_SLACK = 0.1;   // mm the label is drawn under the page, when pagemode = "fit"
 
   var MONTHS = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
 
@@ -484,8 +491,9 @@
   function buildLabel(scale, forPrint){
     scale = scale || 1;
     var W = S.lw, H = S.lh;
-    // the printed label must match the page box exactly, or it spills to a blank page
-    if(forPrint && S.pagemode !== "exact"){ W -= PAGE_FIT; H -= PAGE_FIT; }
+    // the printed label must be a touch SMALLER than the page box, never equal to it,
+    // or a sub-pixel rounding up spills it onto a blank second page
+    if(forPrint && S.pagemode !== "exact"){ W -= LABEL_SLACK; H -= LABEL_SLACK; }
     var rotated = (S.rot === 90 || S.rot === 270);
     var boxW = rotated ? H : W;          // content box in mm, before rotation
     var boxH = rotated ? W : H;
@@ -628,16 +636,18 @@
     updateExpFmtOptions();
     syncPresetSelect();
 
-    // page size for printing
+    // page size for printing — always the stock's exact size, so it matches the
+    // driver's form; the label inside it is what gets the slack (see LABEL_SLACK).
     var pw = S.lw, ph = S.lh;
-    if(S.pagemode !== "exact"){ pw -= PAGE_FIT; ph -= PAGE_FIT; }
     if(S.pagemode === "driver"){
       $("pageStyle").textContent = "@page{margin:0}";
       $("pageNote").textContent = "The page size comes from the stock selected in the printer driver.";
     } else {
       $("pageStyle").textContent = "@page{size:"+pw+"mm "+ph+"mm;margin:0}";
       $("pageNote").textContent = "Page sent to the printer: "+pw+" × "+ph+" mm"+
-        (S.pagemode === "fit" ? " (0.1 mm under the stock so each label stays on one page)." : ".");
+        (S.pagemode === "fit"
+          ? " (label drawn "+LABEL_SLACK+" mm under it so each one stays on a single page)."
+          : " (label drawn to the same size — use Fit if you get blank labels).");
     }
 
     // preview, auto-fitted to the stage's own height (so it stays centered and in view)
