@@ -547,11 +547,12 @@
       if(S.extra)  html += '<div class="datum"><span class="v">'+esc(S.extra)+'</span></div>';
       if(S.extra2) html += '<div class="datum"><span class="v">'+esc(S.extra2)+'</span></div>';
     } else {
-      if(S.extra)  html += '<div class="datum"><span class="v">'+esc(S.extra)+'</span></div>';
-      if(S.extra2) html += '<div class="datum"><span class="v">'+esc(S.extra2)+'</span></div>';
       if(S.batch)  html += '<div class="datum"><span class="k">'+pfxBatch+'</span><span class="v">'+esc(S.batch)+'</span></div>';
       if(S.useMfg && S.mfg) html += '<div class="datum"><span class="k">'+pfxMfg+'</span><span class="v">'+fmtDate(S.mfg,S.expfmt)+'</span></div>';
       if(S.expiry) html += '<div class="datum"><span class="k">'+pfxExp+'</span><span class="v">'+fmtDate(S.expiry,S.expfmt)+'</span></div>';
+      // extra lines sit below the batch and expiry, matching the combined layout above
+      if(S.extra)  html += '<div class="datum"><span class="v">'+esc(S.extra)+'</span></div>';
+      if(S.extra2) html += '<div class="datum"><span class="v">'+esc(S.extra2)+'</span></div>';
     }
 
     var modInfo = null;
