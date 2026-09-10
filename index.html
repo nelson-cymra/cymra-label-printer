@@ -108,17 +108,6 @@
   .hint{font-size:11.5px;color:var(--ink-60);line-height:1.5}
   .hint code{font-family:var(--mono);font-size:11px;background:var(--liner);padding:1px 4px;border-radius:2px}
 
-  .exp-rule{
-    display:flex;align-items:baseline;gap:8px;margin:-2px 0 12px;
-    font-size:11.5px;line-height:1.5;color:var(--ink-60);
-  }
-  .exp-rule.manual{color:var(--warn)}
-  .exp-rule button{
-    border:1px solid var(--rule);background:#fff;border-radius:3px;padding:2px 7px;cursor:pointer;
-    font-family:var(--ui);font-size:11px;color:var(--ink-60);white-space:nowrap;
-  }
-  .exp-rule button:hover{border-color:var(--accent);color:var(--accent)}
-
   .alert{
     margin-top:12px;padding:9px 11px;border-left:3px solid var(--warn);background:var(--warn-soft);
     font-size:12px;color:#7c2d12;line-height:1.45;
@@ -272,10 +261,6 @@
             </select>
           </div>
         </div>
-        <div class="exp-rule" id="expRule">
-          <span id="expNote"></span>
-          <button type="button" id="expReset" hidden>Use rule</button>
-        </div>
         <label class="check"><input type="checkbox" id="combineBE"> Combine batch + expiry on one line (e.g. "EIRV260085 Exp: 01/2028")</label>
         <div id="mfgGroupWrap">
           <label class="check"><input type="checkbox" id="useMfg"> Include manufacture date</label>
@@ -384,13 +369,9 @@
         </p>
         <p class="hint" id="pageNote"></p>
         <p class="hint">
-          Both stocks are built for a driver that does no turning of its own: in
-          <b>Printers &amp; scanners → SATO CL4-SXR TT305 → Printing preferences → Page Setup</b>
-          set <b>Rotation 0° - Portrait</b> and pick the stock you are printing.
-          In the browser's own print dialog leave <b>Layout</b> alone — it reads Portrait for the
-          45 × 218 stock and <b>Landscape for the 25 × 10</b>, because that label is wider than it
-          is tall. Forcing Portrait there turns the 25 × 10 page on its side and clips the label
-          down its right edge.
+          If the preview never loads, the driver is stuck in landscape. Open
+          <b>Printers &amp; scanners → SATO CL4-SXR TT305 → Printing preferences</b>,
+          set the orientation to <b>Portrait</b> and the stock to the one you are printing, then apply.
         </p>
         <div class="alert hidden" id="dataWarn"></div>
       </div>
@@ -463,14 +444,12 @@
   }
 
   /* ---------------- state ---------------- */
-  // Only the fields no preset owns are seeded here. Stock size, placement, typeface and
-  // page mode are filled in by applyPreset(DEFAULT_PRESET) at the bottom of this file —
-  // a second copy of them here is what let the opening state drift from the tube preset,
-  // so the app showed the old placement until you re-picked the stock from the dropdown.
   var S = {
     batch:"", expiry:"", expfmt:"MMM YYYY", useMfg:false, mfg:"", extra:"", extra2:"", combineBE:false,
-    useBarcode:false, bcHeight:12, bcHrt:true, autoExpiry:true,
-    dpi:305, guides:false, qty:1
+    useBarcode:false, bcHeight:12, bcHrt:true,
+    rot:90, align:"right", offset:30.5, pad:18.5, size:9,
+    font:"Arial, Helvetica, sans-serif", prefix:"mixed",
+    lw:45, lh:218, dpi:305, guides:false, qty:1, pagemode:"fit"
   };
 
   // The driver's stocks are exactly their nominal size — queried from the SATO with
@@ -489,58 +468,9 @@
   var MONTHS = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
 
   var PRESETS = {
-    tube:  { lw:45, lh:218, rot:270, align:"right", offset:30.5, pad:10,   size:9,   font:"Arial, Helvetica, sans-serif",      prefix:"mixed", pagemode:"fit"    },
-    small: { lw:25, lh:10,  rot:0,  align:"center", offset:0.5,  pad:1.5,  size:10, font:"'Arial Narrow', Arial, sans-serif", prefix:"mixed", pagemode:"fit",
-             // Combining batch and expiry puts one long datum on a single line, which
-             // only fits this stock at smaller type across the label's whole width.
-             // Untick and the placement above comes back.
-             combined:{ offset:1, pad:0, size:6 } }
+    tube:  { lw:45, lh:218, rot:90, align:"right",  offset:30.5, pad:18.5, size:9,   font:"Arial, Helvetica, sans-serif",      prefix:"mixed" },
+    small: { lw:25, lh:10,  rot:0,  align:"center", offset:1.5,  pad:1.5,  size:8.5, font:"'Arial Narrow', Arial, sans-serif", prefix:"mixed" }
   };
-
-  var DEFAULT_PRESET = "tube";   // the stock the app opens on
-
-  // Shelf life by stock: the expiry printed on a label is the date it is printed
-  // plus this many months. Custom stock has no rule — that date is entered by hand.
-  var EXPIRY_MONTHS = { tube:12, small:18 };
-
-  function isoOf(d){
-    return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
-  }
-
-  // Same day-of-month N months on, clamped to the end of a shorter month, so
-  // 31 Aug + 18 months is 28 Feb rather than rolling over into March.
-  function addMonths(d, n){
-    var day = d.getDate();
-    var t = new Date(d.getFullYear(), d.getMonth()+n, 1);
-    var last = new Date(t.getFullYear(), t.getMonth()+1, 0).getDate();
-    t.setDate(Math.min(day, last));
-    return t;
-  }
-
-  function currentPresetKey(){
-    for(var key in PRESETS){
-      if(PRESETS[key].lw === S.lw && PRESETS[key].lh === S.lh) return key;
-    }
-    return "custom";
-  }
-
-  // The date the rule gives for today's print run, or null on a custom stock.
-  function ruleExpiry(){
-    var m = EXPIRY_MONTHS[currentPresetKey()];
-    return m ? isoOf(addMonths(new Date(), m)) : null;
-  }
-
-  // Puts the rule's date into the field. Skipped once the date has been typed over,
-  // unless forced by the "Use rule" button. Returns true if the date actually moved.
-  function applyExpiryRule(force){
-    if(!S.autoExpiry && !force) return false;
-    var iso = ruleExpiry();
-    if(!iso) return false;
-    S.autoExpiry = true;
-    if(S.expiry === iso) return false;
-    S.expiry = iso; $("expiry").value = iso;
-    return true;
-  }
 
   function fmtDate(iso, fmt){
     if(!iso) return "";
@@ -670,58 +600,30 @@
     }
   }
 
-  // Placement follows the combine checkbox on any stock that declares a `combined`
-  // block. The tube has none — its 218 mm length has room for the joined line at the
-  // normal size — so nothing moves there.
-  function applyPlacement(){
-    var p = PRESETS[currentPresetKey()];
-    if(!p || !p.combined) return;
-    var src = S.combineBE ? p.combined : p;
-    S.offset = src.offset; S.pad = src.pad; S.size = src.size;
-    $("offset").value = S.offset; $("pad").value = S.pad; $("size").value = S.size;
-    sideEffects("offset"); sideEffects("pad"); sideEffects("size");
-  }
-
   function applyPreset(key){
     var p = PRESETS[key];
     if(!p) return;
     S.lw=p.lw; S.lh=p.lh; S.rot=p.rot; S.align=p.align;
     S.offset=p.offset; S.pad=p.pad; S.size=p.size; S.font=p.font; S.prefix=p.prefix;
-    S.pagemode=p.pagemode;
 
     $("lw").value = p.lw; $("lh").value = p.lh;
     $("font").value = p.font; $("prefix").value = p.prefix;
-    $("pagemode").value = p.pagemode;
     setSeg("rot","data-rot", p.rot);
     setSeg("align","data-align", p.align);
 
     $("offset").max = String(Math.max(0, p.lh - 5));
     $("offset").value = p.offset; $("pad").value = p.pad; $("size").value = p.size;
     sideEffects("offset"); sideEffects("pad"); sideEffects("size");
-    applyPlacement();    // and the combine checkbox may move it again
 
-    applyExpiryRule();   // shelf life follows the stock
     render();
   }
 
   function syncPresetSelect(){
-    var sel = $("preset"), match = currentPresetKey();
-    if(sel.value !== match) sel.value = match;
-  }
-
-  function renderExpiryNote(){
-    var months = EXPIRY_MONTHS[currentPresetKey()];
-    var note = $("expNote"), wrap = $("expRule"), btn = $("expReset");
-    if(!months){
-      note.textContent = "Custom stock — no shelf-life rule, set the expiry by hand.";
-      btn.hidden = true; wrap.className = "exp-rule";
-    } else if(S.autoExpiry){
-      note.textContent = "Print date + "+months+" months. Change the date to override.";
-      btn.hidden = true; wrap.className = "exp-rule";
-    } else {
-      note.textContent = "Set by hand — the "+months+"-month rule is not applied.";
-      btn.hidden = false; wrap.className = "exp-rule manual";
+    var sel = $("preset"), match = "custom";
+    for(var key in PRESETS){
+      if(PRESETS[key].lw === S.lw && PRESETS[key].lh === S.lh){ match = key; break; }
     }
+    if(sel.value !== match) sel.value = match;
   }
 
   function updateExpFmtOptions(){
@@ -734,17 +636,9 @@
   function render(){
     updateExpFmtOptions();
     syncPresetSelect();
-    renderExpiryNote();
 
     // page size for printing — always the stock's exact size, so it matches the
     // driver's form; the label inside it is what gets the slack (see LABEL_SLACK).
-    //
-    // The size must be declared even on a stock wider than it is tall. Chrome normalises
-    // a driver form to portrait — asked for "Vape labels" with nothing else to go on it
-    // lays the page out 10 x 25 rather than 25 x 10, and the label is clipped down its
-    // right edge. Naming the size pins the page to 25 x 10; Chrome then shows Landscape
-    // in its own dialog, which is not a conflict with the printer's Portrait setting,
-    // only Chrome's word for a page wider than it is tall.
     var pw = S.lw, ph = S.lh;
     if(S.pagemode === "driver"){
       $("pageStyle").textContent = "@page{margin:0}";
@@ -824,9 +718,6 @@
 
   /* ---------------- printing ---------------- */
   function doPrint(){
-    // the rule is anchored to the print date, so re-derive it here — a tab left open
-    // overnight would otherwise print yesterday's expiry
-    if(applyExpiryRule()) render();
     var root = $("printRoot");
     root.innerHTML = "";
     for(var i=0;i<S.qty;i++) root.appendChild(buildLabel(1, true).el);
@@ -847,9 +738,8 @@
   }
 
   function sideEffects(id){
-    if(id === "expiry")     S.autoExpiry = false;   // typed over: stop steering it
     if(id === "useMfg")     $("mfgWrap").hidden = !S.useMfg;
-    if(id === "combineBE"){ $("mfgGroupWrap").hidden = S.combineBE; applyPlacement(); }
+    if(id === "combineBE")  $("mfgGroupWrap").hidden = S.combineBE;
     if(id === "useBarcode") $("bcOpts").hidden = !S.useBarcode;
     if(id === "offset")   $("offsetOut").textContent = S.offset.toFixed(1)+" mm";
     if(id === "pad")      $("padOut").textContent = S.pad.toFixed(1)+" mm";
@@ -888,11 +778,16 @@
   $("printBtn").addEventListener("click", doPrint);
   window.addEventListener("resize", render);
 
-  $("expReset").addEventListener("click", function(){ applyExpiryRule(true); render(); });
+  // sensible starting expiry: two years out, end of month
+  (function seed(){
+    var d = new Date();
+    d.setFullYear(d.getFullYear()+2);
+    d = new Date(d.getFullYear(), d.getMonth()+1, 0);
+    var iso = d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+    $("expiry").value = iso; S.expiry = iso;
+  })();
 
-  // Open by applying the default stock's preset, so the controls, the state and the
-  // preset always agree. This also seeds the expiry from that stock's rule and renders.
-  applyPreset(DEFAULT_PRESET);
+  render();
 })();
 </script>
 </body>
