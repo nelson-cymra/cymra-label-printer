@@ -384,9 +384,11 @@
         </p>
         <p class="hint" id="pageNote"></p>
         <p class="hint">
-          If the preview never loads, the driver is stuck in landscape. Open
-          <b>Printers &amp; scanners → SATO CL4-SXR TT305 → Printing preferences</b>,
-          set the orientation to <b>Portrait</b> and the stock to the one you are printing, then apply.
+          Both stocks are built for a driver that does no turning of its own. In
+          <b>Printers &amp; scanners → SATO CL4-SXR TT305 → Printing preferences → Page Setup</b>
+          set <b>Rotation 0°</b> and <b>Portrait</b>, and pick the stock you are printing.
+          Landscape there adds a quarter turn on top of the rotation set above, and is
+          also what stops the 45 × 218 preview loading.
         </p>
         <div class="alert hidden" id="dataWarn"></div>
       </div>
@@ -483,8 +485,8 @@
   var MONTHS = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
 
   var PRESETS = {
-    tube:  { lw:45, lh:218, rot:90, align:"right",  offset:30.5, pad:18.5, size:9,   font:"Arial, Helvetica, sans-serif",      prefix:"mixed" },
-    small: { lw:25, lh:10,  rot:0,  align:"center", offset:1.5,  pad:1.5,  size:8.5, font:"'Arial Narrow', Arial, sans-serif", prefix:"mixed" }
+    tube:  { lw:45, lh:218, rot:90, align:"right",  offset:30.5, pad:18.5, size:9,   font:"Arial, Helvetica, sans-serif",      prefix:"mixed", pagemode:"fit"    },
+    small: { lw:25, lh:10,  rot:0,  align:"center", offset:1.5,  pad:1.5,  size:8.5, font:"'Arial Narrow', Arial, sans-serif", prefix:"mixed", pagemode:"driver" }
   };
 
   // Shelf life by stock: the expiry printed on a label is the date it is printed
@@ -663,9 +665,11 @@
     if(!p) return;
     S.lw=p.lw; S.lh=p.lh; S.rot=p.rot; S.align=p.align;
     S.offset=p.offset; S.pad=p.pad; S.size=p.size; S.font=p.font; S.prefix=p.prefix;
+    S.pagemode=p.pagemode;
 
     $("lw").value = p.lw; $("lh").value = p.lh;
     $("font").value = p.font; $("prefix").value = p.prefix;
+    $("pagemode").value = p.pagemode;
     setSeg("rot","data-rot", p.rot);
     setSeg("align","data-align", p.align);
 
@@ -711,10 +715,22 @@
 
     // page size for printing — always the stock's exact size, so it matches the
     // driver's form; the label inside it is what gets the slack (see LABEL_SLACK).
+    //
+    // Except on a stock wider than it is tall. The printer is set to Portrait with
+    // Rotation 0, so it turns nothing of its own and every rotation on a label is the
+    // one set above. Chrome, though, reads the orientation off the @page box and asks
+    // the driver for landscape whenever that box is wider than it is tall — the 25 x 10
+    // stock. The driver then adds a quarter turn nothing on this page asked for. Leaving
+    // the size off stops Chrome naming an orientation, so the driver's stock defines
+    // the page and its Portrait setting stands.
     var pw = S.lw, ph = S.lh;
-    if(S.pagemode === "driver"){
+    var wideStock = pw > ph;
+    if(S.pagemode === "driver" || wideStock){
       $("pageStyle").textContent = "@page{margin:0}";
-      $("pageNote").textContent = "The page size comes from the stock selected in the printer driver.";
+      $("pageNote").textContent = (wideStock && S.pagemode !== "driver")
+        ? "Page size left to the driver: " + pw + " × " + ph + " mm is wider than it is tall, and asking " +
+          "for it by name would make the browser request landscape against the printer's Portrait setting."
+        : "The page size comes from the stock selected in the printer driver.";
     } else {
       $("pageStyle").textContent = "@page{size:"+pw+"mm "+ph+"mm;margin:0}";
       $("pageNote").textContent = "Page sent to the printer: "+pw+" × "+ph+" mm"+
