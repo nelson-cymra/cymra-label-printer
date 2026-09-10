@@ -108,6 +108,17 @@
   .hint{font-size:11.5px;color:var(--ink-60);line-height:1.5}
   .hint code{font-family:var(--mono);font-size:11px;background:var(--liner);padding:1px 4px;border-radius:2px}
 
+  .exp-rule{
+    display:flex;align-items:baseline;gap:8px;margin:-2px 0 12px;
+    font-size:11.5px;line-height:1.5;color:var(--ink-60);
+  }
+  .exp-rule.manual{color:var(--warn)}
+  .exp-rule button{
+    border:1px solid var(--rule);background:#fff;border-radius:3px;padding:2px 7px;cursor:pointer;
+    font-family:var(--ui);font-size:11px;color:var(--ink-60);white-space:nowrap;
+  }
+  .exp-rule button:hover{border-color:var(--accent);color:var(--accent)}
+
   .alert{
     margin-top:12px;padding:9px 11px;border-left:3px solid var(--warn);background:var(--warn-soft);
     font-size:12px;color:#7c2d12;line-height:1.45;
@@ -260,6 +271,10 @@
               <option value="YYYY-MM-DD">2027-12-31</option>
             </select>
           </div>
+        </div>
+        <div class="exp-rule" id="expRule">
+          <span id="expNote"></span>
+          <button type="button" id="expReset" hidden>Use rule</button>
         </div>
         <label class="check"><input type="checkbox" id="combineBE"> Combine batch + expiry on one line (e.g. "EIRV260085 Exp: 01/2028")</label>
         <div id="mfgGroupWrap">
@@ -446,7 +461,7 @@
   /* ---------------- state ---------------- */
   var S = {
     batch:"", expiry:"", expfmt:"MMM YYYY", useMfg:false, mfg:"", extra:"", extra2:"", combineBE:false,
-    useBarcode:false, bcHeight:12, bcHrt:true,
+    useBarcode:false, bcHeight:12, bcHrt:true, autoExpiry:true,
     rot:90, align:"right", offset:30.5, pad:18.5, size:9,
     font:"Arial, Helvetica, sans-serif", prefix:"mixed",
     lw:45, lh:218, dpi:305, guides:false, qty:1, pagemode:"fit"
@@ -471,6 +486,49 @@
     tube:  { lw:45, lh:218, rot:90, align:"right",  offset:30.5, pad:18.5, size:9,   font:"Arial, Helvetica, sans-serif",      prefix:"mixed" },
     small: { lw:25, lh:10,  rot:0,  align:"center", offset:1.5,  pad:1.5,  size:8.5, font:"'Arial Narrow', Arial, sans-serif", prefix:"mixed" }
   };
+
+  // Shelf life by stock: the expiry printed on a label is the date it is printed
+  // plus this many months. Custom stock has no rule — that date is entered by hand.
+  var EXPIRY_MONTHS = { tube:12, small:18 };
+
+  function isoOf(d){
+    return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+  }
+
+  // Same day-of-month N months on, clamped to the end of a shorter month, so
+  // 31 Aug + 18 months is 28 Feb rather than rolling over into March.
+  function addMonths(d, n){
+    var day = d.getDate();
+    var t = new Date(d.getFullYear(), d.getMonth()+n, 1);
+    var last = new Date(t.getFullYear(), t.getMonth()+1, 0).getDate();
+    t.setDate(Math.min(day, last));
+    return t;
+  }
+
+  function currentPresetKey(){
+    for(var key in PRESETS){
+      if(PRESETS[key].lw === S.lw && PRESETS[key].lh === S.lh) return key;
+    }
+    return "custom";
+  }
+
+  // The date the rule gives for today's print run, or null on a custom stock.
+  function ruleExpiry(){
+    var m = EXPIRY_MONTHS[currentPresetKey()];
+    return m ? isoOf(addMonths(new Date(), m)) : null;
+  }
+
+  // Puts the rule's date into the field. Skipped once the date has been typed over,
+  // unless forced by the "Use rule" button. Returns true if the date actually moved.
+  function applyExpiryRule(force){
+    if(!S.autoExpiry && !force) return false;
+    var iso = ruleExpiry();
+    if(!iso) return false;
+    S.autoExpiry = true;
+    if(S.expiry === iso) return false;
+    S.expiry = iso; $("expiry").value = iso;
+    return true;
+  }
 
   function fmtDate(iso, fmt){
     if(!iso) return "";
@@ -615,15 +673,28 @@
     $("offset").value = p.offset; $("pad").value = p.pad; $("size").value = p.size;
     sideEffects("offset"); sideEffects("pad"); sideEffects("size");
 
+    applyExpiryRule();   // shelf life follows the stock
     render();
   }
 
   function syncPresetSelect(){
-    var sel = $("preset"), match = "custom";
-    for(var key in PRESETS){
-      if(PRESETS[key].lw === S.lw && PRESETS[key].lh === S.lh){ match = key; break; }
-    }
+    var sel = $("preset"), match = currentPresetKey();
     if(sel.value !== match) sel.value = match;
+  }
+
+  function renderExpiryNote(){
+    var months = EXPIRY_MONTHS[currentPresetKey()];
+    var note = $("expNote"), wrap = $("expRule"), btn = $("expReset");
+    if(!months){
+      note.textContent = "Custom stock — no shelf-life rule, set the expiry by hand.";
+      btn.hidden = true; wrap.className = "exp-rule";
+    } else if(S.autoExpiry){
+      note.textContent = "Print date + "+months+" months. Change the date to override.";
+      btn.hidden = true; wrap.className = "exp-rule";
+    } else {
+      note.textContent = "Set by hand — the "+months+"-month rule is not applied.";
+      btn.hidden = false; wrap.className = "exp-rule manual";
+    }
   }
 
   function updateExpFmtOptions(){
@@ -636,6 +707,7 @@
   function render(){
     updateExpFmtOptions();
     syncPresetSelect();
+    renderExpiryNote();
 
     // page size for printing — always the stock's exact size, so it matches the
     // driver's form; the label inside it is what gets the slack (see LABEL_SLACK).
@@ -718,6 +790,9 @@
 
   /* ---------------- printing ---------------- */
   function doPrint(){
+    // the rule is anchored to the print date, so re-derive it here — a tab left open
+    // overnight would otherwise print yesterday's expiry
+    if(applyExpiryRule()) render();
     var root = $("printRoot");
     root.innerHTML = "";
     for(var i=0;i<S.qty;i++) root.appendChild(buildLabel(1, true).el);
@@ -738,6 +813,7 @@
   }
 
   function sideEffects(id){
+    if(id === "expiry")     S.autoExpiry = false;   // typed over: stop steering it
     if(id === "useMfg")     $("mfgWrap").hidden = !S.useMfg;
     if(id === "combineBE")  $("mfgGroupWrap").hidden = S.combineBE;
     if(id === "useBarcode") $("bcOpts").hidden = !S.useBarcode;
@@ -778,15 +854,9 @@
   $("printBtn").addEventListener("click", doPrint);
   window.addEventListener("resize", render);
 
-  // sensible starting expiry: two years out, end of month
-  (function seed(){
-    var d = new Date();
-    d.setFullYear(d.getFullYear()+2);
-    d = new Date(d.getFullYear(), d.getMonth()+1, 0);
-    var iso = d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
-    $("expiry").value = iso; S.expiry = iso;
-  })();
+  $("expReset").addEventListener("click", function(){ applyExpiryRule(true); render(); });
 
+  applyExpiryRule();   // starting expiry comes from the rule for the default stock
   render();
 })();
 </script>
