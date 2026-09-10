@@ -488,7 +488,11 @@
 
   var PRESETS = {
     tube:  { lw:45, lh:218, rot:90, align:"right",  offset:30.5, pad:18.5, size:9,   font:"Arial, Helvetica, sans-serif",      prefix:"mixed", pagemode:"fit"    },
-    small: { lw:25, lh:10,  rot:0,  align:"center", offset:0.5,  pad:1.5,  size:10, font:"'Arial Narrow', Arial, sans-serif", prefix:"mixed", pagemode:"fit"    }
+    small: { lw:25, lh:10,  rot:0,  align:"center", offset:0.5,  pad:1.5,  size:10, font:"'Arial Narrow', Arial, sans-serif", prefix:"mixed", pagemode:"fit",
+             // Combining batch and expiry puts one long datum on a single line, which
+             // only fits this stock at smaller type across the label's whole width.
+             // Untick and the placement above comes back.
+             combined:{ offset:1, pad:0, size:6 } }
   };
 
   // Shelf life by stock: the expiry printed on a label is the date it is printed
@@ -662,6 +666,18 @@
     }
   }
 
+  // Placement follows the combine checkbox on any stock that declares a `combined`
+  // block. The tube has none — its 218 mm length has room for the joined line at the
+  // normal size — so nothing moves there.
+  function applyPlacement(){
+    var p = PRESETS[currentPresetKey()];
+    if(!p || !p.combined) return;
+    var src = S.combineBE ? p.combined : p;
+    S.offset = src.offset; S.pad = src.pad; S.size = src.size;
+    $("offset").value = S.offset; $("pad").value = S.pad; $("size").value = S.size;
+    sideEffects("offset"); sideEffects("pad"); sideEffects("size");
+  }
+
   function applyPreset(key){
     var p = PRESETS[key];
     if(!p) return;
@@ -678,6 +694,7 @@
     $("offset").max = String(Math.max(0, p.lh - 5));
     $("offset").value = p.offset; $("pad").value = p.pad; $("size").value = p.size;
     sideEffects("offset"); sideEffects("pad"); sideEffects("size");
+    applyPlacement();    // and the combine checkbox may move it again
 
     applyExpiryRule();   // shelf life follows the stock
     render();
@@ -828,7 +845,7 @@
   function sideEffects(id){
     if(id === "expiry")     S.autoExpiry = false;   // typed over: stop steering it
     if(id === "useMfg")     $("mfgWrap").hidden = !S.useMfg;
-    if(id === "combineBE")  $("mfgGroupWrap").hidden = S.combineBE;
+    if(id === "combineBE"){ $("mfgGroupWrap").hidden = S.combineBE; applyPlacement(); }
     if(id === "useBarcode") $("bcOpts").hidden = !S.useBarcode;
     if(id === "offset")   $("offsetOut").textContent = S.offset.toFixed(1)+" mm";
     if(id === "pad")      $("padOut").textContent = S.pad.toFixed(1)+" mm";
