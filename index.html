@@ -463,12 +463,14 @@
   }
 
   /* ---------------- state ---------------- */
+  // Only the fields no preset owns are seeded here. Stock size, placement, typeface and
+  // page mode are filled in by applyPreset(DEFAULT_PRESET) at the bottom of this file —
+  // a second copy of them here is what let the opening state drift from the tube preset,
+  // so the app showed the old placement until you re-picked the stock from the dropdown.
   var S = {
     batch:"", expiry:"", expfmt:"MMM YYYY", useMfg:false, mfg:"", extra:"", extra2:"", combineBE:false,
     useBarcode:false, bcHeight:12, bcHrt:true, autoExpiry:true,
-    rot:90, align:"right", offset:30.5, pad:18.5, size:9,
-    font:"Arial, Helvetica, sans-serif", prefix:"mixed",
-    lw:45, lh:218, dpi:305, guides:false, qty:1, pagemode:"fit"
+    dpi:305, guides:false, qty:1
   };
 
   // The driver's stocks are exactly their nominal size — queried from the SATO with
@@ -494,6 +496,8 @@
              // Untick and the placement above comes back.
              combined:{ offset:1, pad:0, size:6 } }
   };
+
+  var DEFAULT_PRESET = "tube";   // the stock the app opens on
 
   // Shelf life by stock: the expiry printed on a label is the date it is printed
   // plus this many months. Custom stock has no rule — that date is entered by hand.
@@ -886,8 +890,9 @@
 
   $("expReset").addEventListener("click", function(){ applyExpiryRule(true); render(); });
 
-  applyExpiryRule();   // starting expiry comes from the rule for the default stock
-  render();
+  // Open by applying the default stock's preset, so the controls, the state and the
+  // preset always agree. This also seeds the expiry from that stock's rule and renders.
+  applyPreset(DEFAULT_PRESET);
 })();
 </script>
 </body>
