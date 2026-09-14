@@ -447,9 +447,10 @@
   var S = {
     batch:"", expiry:"", expfmt:"MMM YYYY", useMfg:false, mfg:"", extra:"", extra2:"", combineBE:false,
     useBarcode:false, bcHeight:12, bcHrt:true,
-    rot:90, align:"right", offset:30.5, pad:18.5, size:9,
-    font:"Arial, Helvetica, sans-serif", prefix:"mixed",
-    lw:45, lh:218, dpi:305, guides:false, qty:1, pagemode:"fit"
+    // stock size, placement, typeface and prefixes are filled in by
+    // applyPreset(DEFAULT_PRESET) at the bottom of this file. Keeping a second copy of
+    // them here means an edit to a preset never reaches the screen the app opens on.
+    dpi:305, guides:false, qty:1, pagemode:"fit"
   };
 
   // The driver's stocks are exactly their nominal size — queried from the SATO with
@@ -467,8 +468,10 @@
 
   var MONTHS = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
 
+  var DEFAULT_PRESET = "tube";   // the stock the app opens on
+
   var PRESETS = {
-    tube:  { lw:45, lh:218, rot:90, align:"right",  offset:30.5, pad:18.5, size:9,   font:"Arial, Helvetica, sans-serif",      prefix:"mixed" },
+    tube:  { lw:45, lh:218, rot:270, align:"right", offset:30.5, pad:10,   size:9,   font:"Arial, Helvetica, sans-serif",      prefix:"mixed" },
     small: { lw:25, lh:10,  rot:0,  align:"center", offset:1.5,  pad:1.5,  size:8.5, font:"'Arial Narrow', Arial, sans-serif", prefix:"mixed" }
   };
 
@@ -787,7 +790,9 @@
     $("expiry").value = iso; S.expiry = iso;
   })();
 
-  render();
+  // Open by applying the default stock's preset, so what you see on load is the preset
+  // rather than a stale copy of it.
+  applyPreset(DEFAULT_PRESET);
 })();
 </script>
 </body>
